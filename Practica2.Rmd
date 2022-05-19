@@ -1,0 +1,297 @@
+---
+title: "Tècniques Avançades en Mineria de Dades. Pràctica 2"
+author:
+  - Víctor Rubert Alfonso
+  - Francesc Xavier Gayà Morey
+output:
+  html_notebook:
+    df_print: paged
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+## 1. Preparació del DataFrame
+
+Importar llibreries:
+
+```{r, warning=FALSE}
+library(unbalanced)
+library(rpart)
+library(rpart.plot)
+library(caret)
+```
+
+### 1.1. Lectura del CSV
+
+Llegir el CSV amb la informació dels crims comesos a Los Ángeles:
+
+```{r}
+credit.card = read.csv2("creditcard.csv", header = TRUE, sep = ",")
+
+# Convertir a dades numèriques
+for (i in 1:(ncol(credit.card)-1)){
+  credit.card[[i]] = as.numeric(credit.card[[i]])
+}
+credit.card$Class = factor(credit.card$Class, levels = c(0, 1))
+```
+
+### Anàlisi exploratori de les variables
+
+```{r}
+str(credit.card)
+```
+
+```{r}
+head(credit.card)
+```
+
+
+#### Desbalanç de les classes
+
+```{r}
+n_classes = table(credit.card$Class)
+print(paste("Classe 0:", n_classes[[1]], "(", round(n_classes[[1]]*100/sum(n_classes), 3), "%)"))
+print(paste("Classe 1:", n_classes[[2]], "(", round(n_classes[[2]]*100/sum(n_classes), 3), "%)"))
+```
+
+#### Columna de temps
+```{r}
+summary(credit.card$Time)
+```
+
+```{r}
+hist(credit.card$Time, breaks = 100)
+```
+
+#### Columna de quantitat
+```{r}
+summary(credit.card$Amount)
+```
+
+```{r}
+hist(credit.card$Amount, breaks = 100)
+```
+Aproximació a funció power-law
+
+#### Resta de columnes
+
+Resum per variable:
+```{r}
+summary(credit.card[,2:29])
+```
+Resum de totes a la vegada:
+```{r}
+summary(c(t(credit.card[,2:29])))
+```
+Histograma de dues variables a mode d'exemple:
+```{r}
+hist(credit.card$V13, breaks = 100)
+```
+
+```{r}
+hist(credit.card$V9, breaks = 100)
+```
+
+Pareix que totes les variables s'assimilen a una distribució normal, amb diferent mitjana i variança.
+
+
+### Separar en conjunts d'Entrenament i Test
+```{r}
+set.seed(777)
+train_ind <- sample(seq_len(nrow(credit.card)), size = floor(nrow(credit.card)*0.8), replace = FALSE)
+
+credit.train <- credit.card[train_ind, ]
+credit.test <- credit.card[-train_ind, ]
+
+nrow(credit.train)
+table(credit.train$Class)
+nrow(credit.test)
+table(credit.test$Class)
+```
+
+
+## Model de classificació
+
+```{r}
+get_pred_qual <- function(prediccion){
+  pred_qual=rep("0",dim(prediccion)[1])
+  pred_qual[prediccion[,2]>=0.5]="1"
+  return(as.factor(pred_qual))
+}
+
+print_metrics <- function(prediccion, gt, cm=FALSE){
+  
+  if(cm)
+    print(confusionMatrix(data = pred_qual, gt))
+  else{
+    pred_qual = get_pred_qual(prediccion)
+    sensit = sensitivity(pred_qual, gt)
+    specif = specificity(pred_qual, gt)
+    balanced_acc = (sensit + specif) / 2
+  
+    print(paste("F1-measure:", F_meas(pred_qual, gt)))
+    print(paste("Balanced Accuracy:", balanced_acc))
+    print(paste("Sensitivity:", sensit))
+    print(paste("Specificity:", specif))
+  }
+}
+```
+
+
+```{r}
+arbol = rpart(Class ~ ., data = credit.train)
+```
+
+```{r}
+print_metrics(predict(arbol, newdata = credit.test), prova.test$Class, cm=TRUE)
+```
+
+
+## Rebalanceig de les dades
+
+### Undersampling
+
+* Random
+* Tomek Links
+* Condensed Nearest Neighbors (CNN)
+* Edited Nearest Neighbors (ENN)
+* Neighborhood Cleaning Rule (NCL)
+* One-Sided Detection (OSS): Tomek Links + CNN
+* CNN + Tomek Links
+
+```{r}
+to_dataframe <- function(results) {
+  new_df = results$X
+  new_df$Class = results$Y
+  return(new_df)
+}
+```
+
+
+```{r}
+cnn = ubCNN(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k=1)
+table(cnn$Y)
+arbol = rpart( Class ~ ., data = to_dataframe(cnn))
+print_metrics(predict(arbol, newdata = credit.test), credit.test$Class)
+```
+
+```{r}
+tl = ubTomek(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class)
+table(tl$Y)
+```
+
+```{r}
+oss = ubOSS(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class)
+table(oss$Y)
+```
+
+```{r}
+# Amb k=10 no n'esborra cap
+ncl = ubNCL(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k=3)
+table(ncl$Y)
+```
+
+```{r}
+enn = ubENN(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k=3)
+table(enn$Y)
+```
+```{r}
+# CNN + Tomek Links
+cnn2 = ubCNN(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k=1)
+tl2 = ubTomek(X=cnn2$X, Y=cnn2$Y)
+urandom2 = ubUnder(X=tl2$X, Y=tl2$Y, perc = 30)
+table(urandom2$Y)
+```
+
+```{r}
+urandom = ubUnder(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc = 30)
+table(urandom$Y)
+```
+
+### Oversampling
+
+* Random
+* SMOTE
+* Borderline-SMOTE -> no està al paquet unbalanced
+
+```{r}
+# Emprar k=0 per deixar amb els mateixos exemples que classe majoritària
+orandom = ubOver(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k = 300)
+table(orandom$Y)
+```
+
+```{r}
+# Funció per unir resultats de SMOTE a dataframe
+join.smote.results <- function(res_ubsmote, df){
+  new_df = res_ubsmote$X
+  new_df$Class = res_ubsmote$Y
+  return(rbind(new_df, df))
+}
+```
+
+
+```{r}
+osmote = join.smote.results(ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 20000, perc.under = 0), credit.train)
+table(osmote$Class)
+```
+
+### Hybrid resampling
+
+* SMOTE with random undersampling
+* SMOTE + Tomek LInks
+* SMOTE + ENN
+* Altres combinacions
+
+```{r}
+hsmote = ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 20000, perc.under = 200)
+table(hsmote$Y)
+```
+```{r}
+h.smote.tk = join.smote.results(ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 20000, perc.under = 0), credit.train)
+h.smote.tk = ubTomek(X=h.smote.tk[, -ncol(credit.train)], Y=h.smote.tk$Class)
+table(h.smote.tk$Y)
+```
+
+```{r}
+h.smote.enn = join.smote.results(ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 20000, perc.under = 0), credit.train)
+h.smote.enn = ubENN(X=h.smote.enn[, -ncol(credit.train)], Y=h.smote.enn$Class, k=3)
+table(h.smote.enn$Y)
+```
+
+```{r}
+h.urandom.smote.tk = ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 2000, perc.under = 200)
+h.urandom.smote.tk = ubTomek(X=h.urandom.smote.tk$X, Y=h.urandom.smote.tk$Y)
+table(h.urandom.smote.tk$Y)
+```
+
+### Model sensible al cost
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

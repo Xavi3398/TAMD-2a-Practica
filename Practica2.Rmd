@@ -121,7 +121,7 @@ get_pred_qual <- function(prediccion){
 }
 
 print_metrics <- function(prediccion, gt, cm=FALSE){
-  
+  pred_qual = get_pred_qual(prediccion)
   if(cm)
     print(confusionMatrix(data = pred_qual, gt))
   else{
@@ -144,7 +144,7 @@ arbol = rpart(Class ~ ., data = credit.train)
 ```
 
 ```{r}
-print_metrics(predict(arbol, newdata = credit.test), prova.test$Class, cm=TRUE)
+print_metrics(predict(arbol, newdata = credit.test), credit.test$Class, cm=TRUE)
 ```
 
 
@@ -160,6 +160,7 @@ print_metrics(predict(arbol, newdata = credit.test), prova.test$Class, cm=TRUE)
 * One-Sided Detection (OSS): Tomek Links + CNN
 * CNN + Tomek Links
 
+Funció per ajuntar X i Y dels resultats en un sol DataFrame:
 ```{r}
 to_dataframe <- function(results) {
   new_df = results$X
@@ -168,45 +169,124 @@ to_dataframe <- function(results) {
 }
 ```
 
-
+#### Condensed Nearest Neighbors (CNN)
 ```{r}
-cnn = ubCNN(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k=1)
-table(cnn$Y)
-arbol = rpart( Class ~ ., data = to_dataframe(cnn))
+# Undersampling
+results = ubCNN(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k=1)
+table(results$Y)
+
+# Entrenament
+arbol = rpart( Class ~ ., data = to_dataframe(results))
+
+# Test
 print_metrics(predict(arbol, newdata = credit.test), credit.test$Class)
 ```
 
+#### Tomek Links
 ```{r}
-tl = ubTomek(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class)
-table(tl$Y)
+# Undersampling
+results = ubTomek(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class)
+table(results$Y)
+
+# Entrenament
+arbol = rpart( Class ~ ., data = to_dataframe(results))
+
+# Test
+print_metrics(predict(arbol, newdata = credit.test), credit.test$Class)
 ```
 
+#### One-Sided Detection (OSS): Tomek Links + CNN
 ```{r}
-oss = ubOSS(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class)
-table(oss$Y)
+# Undersampling
+results = ubOSS(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class)
+table(results$Y)
+
+# Entrenament
+arbol = rpart( Class ~ ., data = to_dataframe(results))
+
+# Test
+print_metrics(predict(arbol, newdata = credit.test), credit.test$Class)
+```
+#### Neighborhood Cleaning Rule (NCL)
+```{r}
+# Undersampling
+results = ubNCL(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k=3) # Amb k=10 no n'esborra cap
+table(results$Y)
+
+# Entrenament
+arbol = rpart( Class ~ ., data = to_dataframe(results))
+
+# Test
+print_metrics(predict(arbol, newdata = credit.test), credit.test$Class)
 ```
 
+#### Edited Nearest Neighbors (ENN)
 ```{r}
-# Amb k=10 no n'esborra cap
-ncl = ubNCL(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k=3)
-table(ncl$Y)
+# Undersampling
+results = ubENN(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k=3)
+table(results$Y)
+
+# Entrenament
+arbol = rpart( Class ~ ., data = to_dataframe(results))
+
+# Test
+print_metrics(predict(arbol, newdata = credit.test), credit.test$Class)
+```
+#### CNN + Tomek Links
+```{r}
+# Undersampling
+cnn2 = ubCNN(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k=1)
+results = ubTomek(X=cnn2$X, Y=cnn2$Y)
+table(results$Y)
+
+# Entrenament
+arbol = rpart( Class ~ ., data = to_dataframe(results))
+
+# Test
+print_metrics(predict(arbol, newdata = credit.test), credit.test$Class)
 ```
 
+#### CNN + Tomek Links + Random
 ```{r}
-enn = ubENN(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k=3)
-table(enn$Y)
-```
-```{r}
-# CNN + Tomek Links
+# Undersampling
 cnn2 = ubCNN(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k=1)
 tl2 = ubTomek(X=cnn2$X, Y=cnn2$Y)
-urandom2 = ubUnder(X=tl2$X, Y=tl2$Y, perc = 30)
-table(urandom2$Y)
+results = ubUnder(X=tl2$X, Y=tl2$Y, perc = 30)
+table(results$Y)
+
+# Entrenament
+arbol = rpart( Class ~ ., data = to_dataframe(results))
+
+# Test
+print_metrics(predict(arbol, newdata = credit.test), credit.test$Class)
 ```
 
+#### Random + CNN + Tomek Links
 ```{r}
-urandom = ubUnder(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc = 30)
-table(urandom$Y)
+# Undersampling
+random = ubUnder(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc = 30)
+cnn2 = ubCNN(X=random$X, Y=random$Y, k=1)
+results = ubTomek(X=cnn2$X, Y=cnn2$Y)
+table(results$Y)
+
+# Entrenament
+arbol = rpart( Class ~ ., data = to_dataframe(results))
+
+# Test
+print_metrics(predict(arbol, newdata = credit.test), credit.test$Class)
+```
+
+#### Random
+```{r}
+# Undersampling
+results = ubUnder(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc = 30)
+table(results$Y)
+
+# Entrenament
+arbol = rpart( Class ~ ., data = to_dataframe(results))
+
+# Test
+print_metrics(predict(arbol, newdata = credit.test), credit.test$Class)
 ```
 
 ### Oversampling
@@ -215,25 +295,43 @@ table(urandom$Y)
 * SMOTE
 * Borderline-SMOTE -> no està al paquet unbalanced
 
+#### Random
 ```{r}
+# Oversampling
 # Emprar k=0 per deixar amb els mateixos exemples que classe majoritària
-orandom = ubOver(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k = 300)
-table(orandom$Y)
+results = ubOver(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k = 300)
+table(results$Y)
+
+# Entrenament
+arbol = rpart( Class ~ ., data = to_dataframe(results))
+
+# Test
+print_metrics(predict(arbol, newdata = credit.test), credit.test$Class)
 ```
+
+
+
+#### SMOTE
 
 ```{r}
 # Funció per unir resultats de SMOTE a dataframe
 join.smote.results <- function(res_ubsmote, df){
   new_df = res_ubsmote$X
   new_df$Class = res_ubsmote$Y
-  return(rbind(new_df, df))
+  return(rbind(df, new_df))
 }
 ```
 
-
 ```{r}
-osmote = join.smote.results(ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 20000, perc.under = 0), credit.train)
-table(osmote$Class)
+# Oversampling
+results = rbind(credit.train, to_dataframe(ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 20000, perc.under = 0)))
+table(results$Class)
+
+# Entrenament
+arbol = rpart(Class ~ ., data = results)
+
+# Test
+print_metrics(predict(arbol, newdata = credit.test), credit.test$Class)
 ```
 
 ### Hybrid resampling
@@ -243,35 +341,112 @@ table(osmote$Class)
 * SMOTE + ENN
 * Altres combinacions
 
+#### SMOTE with random undersampling
 ```{r}
-hsmote = ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 20000, perc.under = 200)
-table(hsmote$Y)
+# Hybrid resampling
+results = ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 20000, perc.under = 200)
+table(results$Y)
+
+# Entrenament
+arbol = rpart( Class ~ ., data = to_dataframe(results))
+
+# Test
+print_metrics(predict(arbol, newdata = credit.test), credit.test$Class)
 ```
+
+#### SMOTE + Tomek LInks
 ```{r}
+# Hybrid resampling
 h.smote.tk = join.smote.results(ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 20000, perc.under = 0), credit.train)
-h.smote.tk = ubTomek(X=h.smote.tk[, -ncol(credit.train)], Y=h.smote.tk$Class)
-table(h.smote.tk$Y)
+results = ubTomek(X=h.smote.tk[, -ncol(credit.train)], Y=h.smote.tk$Class)
+table(results$Y)
+
+# Entrenament
+arbol = rpart( Class ~ ., data = to_dataframe(results))
+
+# Test
+print_metrics(predict(arbol, newdata = credit.test), credit.test$Class)
 ```
 
+#### SMOTE + ENN
 ```{r}
+# Hybrid resampling
 h.smote.enn = join.smote.results(ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 20000, perc.under = 0), credit.train)
-h.smote.enn = ubENN(X=h.smote.enn[, -ncol(credit.train)], Y=h.smote.enn$Class, k=3)
-table(h.smote.enn$Y)
+results = ubENN(X=h.smote.enn[, -ncol(credit.train)], Y=h.smote.enn$Class, k=3)
+table(results$Y)
+
+# Entrenament
+arbol = rpart( Class ~ ., data = to_dataframe(results))
+
+# Test
+print_metrics(predict(arbol, newdata = credit.test), credit.test$Class)
 ```
 
+#### SMOTE with random undersampling + Tomek Links
 ```{r}
+# Hybrid resampling
 h.urandom.smote.tk = ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 2000, perc.under = 200)
-h.urandom.smote.tk = ubTomek(X=h.urandom.smote.tk$X, Y=h.urandom.smote.tk$Y)
-table(h.urandom.smote.tk$Y)
+results = ubTomek(X=h.urandom.smote.tk$X, Y=h.urandom.smote.tk$Y)
+table(results$Y)
+
+# Entrenament
+arbol = rpart( Class ~ ., data = to_dataframe(results))
+
+# Test
+print_metrics(predict(arbol, newdata = credit.test), credit.test$Class)
 ```
 
 ### Model sensible al cost
 
 
+```{r}
+df_resultats <- function(resultats, gt, nom.tecnica){
+  
+  arbre = rpart( Class ~ ., data = resultats)
+  prediccio = predict(arbol, newdata = credit.test)
+  
+  df = df_metriques(prediccio, resultats, gt, nom.tecnica, "arbre")
+  
+  return(df)
+}
+
+df_metriques <- function(prediccio, resultats, gt, nom.tecnica, nom.model){
+  
+  pred_qual = get_pred_qual(prediccio)
+  
+  # Mètriques
+  sensit = sensitivity(pred_qual, gt)
+  specif = specificity(pred_qual, gt)
+  balanced_acc = (sensit + specif) / 2
+  taula_classes = table(resultats$Class)
+  
+  df = data.frame(
+    Tecnica = nom.tecnica,
+    Model = nom.model,
+    N.Positius = taula_classes[[2]],
+    N.Negatius = taula_classes[[1]],
+    F1.Measure = F_meas(pred_qual, gt),
+    Balanced.Accuracy = balanced_acc,
+    Precision = precision(pred_qual, gt),
+    Recall = recall(pred_qual, gt),
+    Sensitivity = sensit,
+    Specificity = specif
+  )
+  
+  return(df)
+}
+
+get_pred_qual <- function(prediccion){
+  pred_qual=rep("0",dim(prediccion)[1])
+  pred_qual[prediccion[,2]>=0.5]="1"
+  return(as.factor(pred_qual))
+}
+```
 
 
-
-
+```{r}
+df_resultats(to_dataframe(results), credit.test$Class, "SMOTE with random undersampling + Tomek Links")
+```
 
 
 

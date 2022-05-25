@@ -18,6 +18,7 @@ Importar llibreries:
 ```{r, warning=FALSE}
 library(unbalanced)
 library(rpart)
+library(class)
 library(rpart.plot)
 library(caret)
 ```
@@ -95,14 +96,46 @@ hist(credit.card$V9, breaks = 100)
 
 Pareix que totes les variables s'assimilen a una distribució normal, amb diferent mitjana i variança.
 
+#### Correlació entre variables
+
+A continuació, es representa la correlació trobada entre variables. El valor més elevat el trobam entre les variables "Amount" i V2: -0,53:
+
+```{r, fig.width=12, fig.height=8}
+library(corrplot)
+corrplot(cor(credit.card[, -ncol(credit.card)]), 
+                   method = "color",
+                   type = "upper",
+                   addCoef.col = "white",number.cex = 0.7,
+                   tl.col="black", tl.srt=35,tl.cex = 0.7,
+                   cl.cex = 0.7,order = "hclust")
+```
+
+Així, vegent que en general la correlació es prou baixa, consideram que no és necessari eliminar cap variable. En el cas que s'hagués trobat una alta correlació entre variables, si que hagués estat adient eliminar-ne alguna, ja que significaria que la major part de la informació que aporta una variable, pot esser explicada ja per una altra
+
+### Normalització de les dades
+
+Abans de procedir, és important normalitzar les dades, ja que s'hauran d'entrenar models d'aprenentatge automàtic i, com hem vist, els valors que poden prendre les diferents variables són molt diferents (la variable de temps, sobretot, pot prendre valors molt elevats).
+
+Per fer la normalització de les dades, senzillament s'han deixat amb valor mínim de 0 i màxim de 1, reescalant totes les dades a aquest intérval:
+```{r}
+scl <- function(x){ (x - min(x))/(max(x) - min(x)) }
+credit.norm = credit.card
+credit.norm[, -ncol(credit.norm)] = data.frame(lapply(credit.card[, -ncol(credit.card)], scl))
+head(credit.norm)
+```
+
+```{r}
+summary(c(t(credit.norm[, -ncol(credit.norm)])))
+```
+Com veim, efectivament les dades es troben ara dins el rang [0,1] per a totes les variables.
 
 ### Separar en conjunts d'Entrenament i Test
 ```{r}
 set.seed(777)
-train_ind <- sample(seq_len(nrow(credit.card)), size = floor(nrow(credit.card)*0.8), replace = FALSE)
+train_ind <- sample(seq_len(nrow(credit.norm)), size = floor(nrow(credit.norm)*0.8), replace = FALSE)
 
-credit.train <- credit.card[train_ind, ]
-credit.test <- credit.card[-train_ind, ]
+credit.train <- credit.norm[train_ind, ]
+credit.test <- credit.norm[-train_ind, ]
 
 nrow(credit.train)
 table(credit.train$Class)
@@ -114,19 +147,25 @@ table(credit.test$Class)
 ## Model de classificació
 
 ```{r}
-df_resultats <- function(resultats, gt, nom.tipus.tecnica, nom.tecnica){
+df_resultats <- function(resultats, gt, nom.tipus.tecnica, nom.tecnica, th=0.5){
   
+  # Decision Tree
   arbre = rpart( Class ~ ., data = resultats)
   prediccio = predict(arbre, newdata = credit.test)
+  df = df_metriques(prediccio, resultats, gt, nom.tipus.tecnica, nom.tecnica, "arbre", th)
   
-  df = df_metriques(prediccio, resultats, gt, nom.tipus.tecnica, nom.tecnica, "arbre")
+  # Knn, k=3
+  prediccio = knn(resultats[, -ncol(resultats)], credit.test[, -ncol(credit.test)], cl=resultats$Class, k=3)
+  df = rbind(df, df_metriques(prediccio, resultats, gt, nom.tipus.tecnica, nom.tecnica, "knn", pq=TRUE, th))
   
   return(df)
 }
 
-df_metriques <- function(prediccio, resultats, gt, nom.tipus.tecnica, nom.tecnica, nom.model){
-  
-  pred_qual = get_pred_qual(prediccio)
+df_metriques <- function(prediccio, resultats, gt, nom.tipus.tecnica, nom.tecnica, nom.model, pq=FALSE, th=0.5){
+  if(pq)
+    pred_qual = prediccio
+  else
+    pred_qual = get_pred_qual(prediccio, th)
   
   # Mètriques
   sensit = sensitivity(pred_qual, gt)
@@ -151,16 +190,19 @@ df_metriques <- function(prediccio, resultats, gt, nom.tipus.tecnica, nom.tecnic
   return(df)
 }
 
-get_pred_qual <- function(prediccion){
+get_pred_qual <- function(prediccion, th=0.5){
   pred_qual=rep("0",dim(prediccion)[1])
-  pred_qual[prediccion[,2]>=0.5]="1"
+  pred_qual[prediccion[,2]>=th]="1"
   return(as.factor(pred_qual))
 }
 
-print_metrics <- function(prediccion, gt, cm=FALSE){
+print_metrics <- function(prediccion, gt, cm=FALSE, th=0.5){
+  
   pred_qual = get_pred_qual(prediccion)
+  
   if(cm)
     print(confusionMatrix(data = pred_qual, gt))
+  
   else{
     pred_qual = get_pred_qual(prediccion)
     sensit = sensitivity(pred_qual, gt)
@@ -184,18 +226,31 @@ to_dataframe <- function(results) {
 
 
 ```{r}
-df.resultats = df_resultats(credit.train, credit.test$Class, "Cap", "Cap")
-df.resultats
+# arbre = rpart(Class ~ ., data = credit.train)
+# prediccio = predict(arbre, newdata = credit.test)
+# df = df_metriques(prediccio, credit.train, credit.test$Class, "Cap", "Cap", "arbre")
+# df
 ```
 
 ```{r}
-arbol = rpart(Class ~ ., data = credit.train)
-specificity(get_pred_qual(predict(arbol, newdata = credit.test)), credit.test$Class)
-df.prova = df_resultats(to_dataframe(results), credit.test$Class, "Cap", "1")
-
-df.prova
+# prediccio = knn(credit.train[, -ncol(credit.train)], credit.test[, -ncol(credit.train)], cl=credit.train$Class, k=3)
+# df = df_metriques(prediccio, credit.train, credit.test$Class, "Cap", "Cap", "knn", pq=TRUE)
+# df
 ```
 
+```{r}
+# library(neuralnet)
+# ann = neuralnet(Class ~ ., data = credit.train, hidden = c(5), act.fct = "logistic", linear.output = FALSE, stepmax=1000, lifesign = "full")
+# res =compute(ann, credit.test[, -ncol(credit.test)])
+# res$net.result
+```
+
+
+
+```{r}
+df.resultats = df_resultats(credit.train, credit.test$Class, "Cap", "Cap")
+df.resultats
+```
 
 ## Rebalanceig de les dades
 
@@ -332,6 +387,11 @@ df.resultats = rbind(df.resultats, df_resultats(to_dataframe(results), credit.te
 options(digits=5)
 df.resultats
 ```
+
+
+
+
+
 
 
 

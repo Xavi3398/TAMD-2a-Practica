@@ -11,6 +11,13 @@ editor_options:
     wrap: 72
 ---
 
+# Introducció
+
+En el problema de classificació molts de cops es pot trobar en que les dades no tenen una simetria en quant a la quantitat de dades amb valors positius o negatius. Quan el conjunt de dades té unes característiques d'aquest estil es diu que es un problema de balanceig. Exemples d'aquest estil poden sortir en camps tan diversos com la medicina, on la majoria de vegades el pacient no té la malaltia, o en criminologia, on molts de cops pot passar que es sospitòs sigui innocent.\\
+Per resoldre aquest problema existeixen diverses tècniques que minimitzen els efectes d'aquest balanceig, i en aquest treball s'intentaran aplicar una mostra d'aquestes i comparar els seus resultats.\\
+
+Les dades utilitzades són un conjunt de dades relacionades amb el frau en transaccions bancàries. En aquest cas, la majoria de les dades són transaccions no fraudulentes, però n'hi ha unes poques que s'han detectat com a frau, i es preté a partir de les dades que es tenen intentar detectar quan es s'ha comés el crim.
+
 ## 1. Preparació del DataFrame
 
 Importar llibreries:
@@ -25,7 +32,7 @@ library(caret)
 
 ### 1.1. Lectura del CSV
 
-Llegir el CSV amb la informació dels crims comesos a Los Ángeles:
+Llegir el CSV amb la informació dels crims comesos a Los Ángeles. A més, convertim a numèric tots els valors de les diferents variables, i en factors els valors de la classe que volem predir.
 
 ```{r}
 credit.card = read.csv2("creditcard.csv", header = TRUE, sep = ",")
@@ -47,16 +54,19 @@ str(credit.card)
 head(credit.card)
 ```
 
-
+Veim com tenim diferents variables, amb noms genèrics per respectar l'anonimitat de les dades. També es pot veure que aquestes dades agafen valors al voltant del 0.
 #### Desbalanç de les classes
-
+Una de les parts més importants a tractar dins aquest treball és el fet de que les dades no tenen una quantitat similar de dades positives que negatives. Feim una ullada a la quantitat de cadascuna d'aquestes classes.
 ```{r}
 n_classes = table(credit.card$Class)
 print(paste("Classe 0:", n_classes[[1]], "(", round(n_classes[[1]]*100/sum(n_classes), 3), "%)"))
 print(paste("Classe 1:", n_classes[[2]], "(", round(n_classes[[2]]*100/sum(n_classes), 3), "%)"))
 ```
+Veim com efectivament la classe negativa, o classe 0, representa un gran percentatge de les dades que tenim, per tant el problema de classificació és clarament un problema de desbalanceig.\\
 
+Continuant amb l'anàlisis de les variables, veurem a continuació diversos histogrames d'algunes variables.
 #### Columna de temps
+Començam aquesta visualització amb una de les poques variables que coneixem, que és el temps transcorregut desde la primera transacci´registrada.
 ```{r}
 summary(credit.card$Time)
 ```
@@ -64,8 +74,10 @@ summary(credit.card$Time)
 ```{r}
 hist(credit.card$Time, breaks = 100)
 ```
+Podem veure com el volum de transaccions és més elevat en dos moment de tot el periode enregistrat. Aquestes dues parts són degudes als dos dies que es tenen presents. Si bé en cap moment no tenim una quantitat nul·la de transaccions, si que podem veure una baixada significativa a les hores nocturnes.
 
 #### Columna de quantitat
+Vegem ara un histograma de les quantitats prestades.
 ```{r}
 summary(credit.card$Amount)
 ```
@@ -73,18 +85,16 @@ summary(credit.card$Amount)
 ```{r}
 hist(credit.card$Amount, breaks = 100)
 ```
-Aproximació a funció power-law
+Veim com la majoria dels prèstecs concebuts estan situats a la part esquerra del diagrama, que son aquelles quantitats no superiors a 100€
 
 #### Resta de columnes
 
-Resum per variable:
+Per la resta de columnes, com que no sabem que representen, no podem extreure conclusions tan axhaustives. Si que podem, encara així, calcular alguns estadístics sobre aquestes.
 ```{r}
 summary(credit.card[,2:29])
 ```
-Resum de totes a la vegada:
-```{r}
-summary(c(t(credit.card[,2:29])))
-```
+Veim com no sols totes tenen valors propers al 0 sino que a més aquesta es la mitjana de cada variable.
+
 Histograma de dues variables a mode d'exemple:
 ```{r}
 hist(credit.card$V13, breaks = 100)
@@ -94,7 +104,7 @@ hist(credit.card$V13, breaks = 100)
 hist(credit.card$V9, breaks = 100)
 ```
 
-Pareix que totes les variables s'assimilen a una distribució normal, amb diferent mitjana i variança.
+Veim com a més gràficament les diferents variables segueixen una distribució normal.
 
 #### Correlació entre variables
 

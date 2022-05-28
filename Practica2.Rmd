@@ -13,10 +13,11 @@ editor_options:
 
 # Introducció
 
-En el problema de classificació molts de cops es pot trobar en que les dades no tenen una simetria en quant a la quantitat de dades amb valors positius o negatius. Quan el conjunt de dades té unes característiques d'aquest estil es diu que es un problema de balanceig. Exemples d'aquest estil poden sortir en camps tan diversos com la medicina, on la majoria de vegades el pacient no té la malaltia, o en criminologia, on molts de cops pot passar que es sospitòs sigui innocent.\\
-Per resoldre aquest problema existeixen diverses tècniques que minimitzen els efectes d'aquest balanceig, i en aquest treball s'intentaran aplicar una mostra d'aquestes i comparar els seus resultats.\\
+En el problema de classificació, molts cops es pot trobar en què les dades no tenen una simetria en quant a la quantitat de dades amb valors positius o negatius. Quan el conjunt de dades té unes característiques d'aquest estil es diu que és un problema de balanceig. Exemples d'aquest estil poden sortir en camps tan diversos com la medicina, on la majoria de vegades el pacient no té la malaltia, o en criminologia, on molts de cops pot passar que el sospitòs sigui innocent.
 
-Les dades utilitzades són un conjunt de dades relacionades amb el frau en transaccions bancàries. En aquest cas, la majoria de les dades són transaccions no fraudulentes, però n'hi ha unes poques que s'han detectat com a frau, i es preté a partir de les dades que es tenen intentar detectar quan es s'ha comés el crim.
+Per resoldre aquest problema existeixen diverses tècniques que minimitzen els efectes d'aquest balanceig, i en aquest treball s'intentaran aplicar una mostra d'aquestes i comparar els seus resultats.
+
+Les dades utilitzades són un conjunt de dades relacionades amb el frau en transaccions bancàries. En aquest cas, la majoria de les dades són transaccions no fraudulentes, però n'hi ha unes poques que s'han detectat com a frau, i es preté, a partir de les dades que es tenen, intentar detectar quan s'ha comés el crim.
 
 ## 1. Preparació del DataFrame
 
@@ -24,10 +25,11 @@ Importar llibreries:
 
 ```{r, warning=FALSE}
 library(unbalanced)
-library(rpart)
-library(class)
-library(rpart.plot)
 library(caret)
+library(rpart) # Arbre de decisió
+library(class) # KNN
+library(e1071) # SVM
+library(corrplot)
 ```
 
 ### 1.1. Lectura del CSV
@@ -54,19 +56,29 @@ str(credit.card)
 head(credit.card)
 ```
 
-Veim com tenim diferents variables, amb noms genèrics per respectar l'anonimitat de les dades. També es pot veure que aquestes dades agafen valors al voltant del 0.
+Veim com tenim diferents variables amb noms genèrics per respectar l'anonimitat de les dades. També es pot veure que aquestes dades agafen valors al voltant del 0.
+
+<br>
+
 #### Desbalanç de les classes
-Una de les parts més importants a tractar dins aquest treball és el fet de que les dades no tenen una quantitat similar de dades positives que negatives. Feim una ullada a la quantitat de cadascuna d'aquestes classes.
+
+Una de les parts més importants a tractar en aquest treball és el fet de no tenir una quantitat similar de dades positives que negatives. Feim una ullada a la quantitat de cadascuna d'aquestes classes:
+
 ```{r}
 n_classes = table(credit.card$Class)
 print(paste("Classe 0:", n_classes[[1]], "(", round(n_classes[[1]]*100/sum(n_classes), 3), "%)"))
 print(paste("Classe 1:", n_classes[[2]], "(", round(n_classes[[2]]*100/sum(n_classes), 3), "%)"))
 ```
-Veim com efectivament la classe negativa, o classe 0, representa un gran percentatge de les dades que tenim, per tant el problema de classificació és clarament un problema de desbalanceig.\\
+Veim com efectivament la classe negativa, o classe 0, representa un gran percentatge de les dades que tenim, i per tant el problema de classificació és clarament un problema de desbalanceig.\\
 
 Continuant amb l'anàlisis de les variables, veurem a continuació diversos histogrames d'algunes variables.
+
+<br>
+
 #### Columna de temps
-Començam aquesta visualització amb una de les poques variables que coneixem, que és el temps transcorregut desde la primera transacci´registrada.
+
+Començam aquesta visualització amb una de les poques variables que coneixem, que és el temps transcorregut desde la primera transacció enregistrada.
+
 ```{r}
 summary(credit.card$Time)
 ```
@@ -76,8 +88,11 @@ hist(credit.card$Time, breaks = 100)
 ```
 Podem veure com el volum de transaccions és més elevat en dos moment de tot el periode enregistrat. Aquestes dues parts són degudes als dos dies que es tenen presents. Si bé en cap moment no tenim una quantitat nul·la de transaccions, si que podem veure una baixada significativa a les hores nocturnes.
 
+<br>
+
 #### Columna de quantitat
-Vegem ara un histograma de les quantitats prestades.
+
+Vegem ara un histograma de les quantitats deixades:
 ```{r}
 summary(credit.card$Amount)
 ```
@@ -85,15 +100,17 @@ summary(credit.card$Amount)
 ```{r}
 hist(credit.card$Amount, breaks = 100)
 ```
-Veim com la majoria dels prèstecs concebuts estan situats a la part esquerra del diagrama, que son aquelles quantitats no superiors a 100€
+Veim com la majoria dels prèstecs concebuts estan situats a la part esquerra del diagrama, que son aquelles quantitats no superiors a 100€.
+
+<br>
 
 #### Resta de columnes
 
-Per la resta de columnes, com que no sabem que representen, no podem extreure conclusions tan axhaustives. Si que podem, encara així, calcular alguns estadístics sobre aquestes.
+Per la resta de columnes, com que no sabem què representen, no podem extreure conclusions tan axhaustives. Si que podem, encara així, calcular alguns estadístics sobre aquestes.
 ```{r}
 summary(credit.card[,2:29])
 ```
-Veim com no sols totes tenen valors propers al 0 sino que a més aquesta es la mitjana de cada variable.
+Veim com no sols totes tenen valors propers al 0 sino que a més aquesta és la mitjana de cada variable.
 
 Histograma de dues variables a mode d'exemple:
 ```{r}
@@ -104,14 +121,15 @@ hist(credit.card$V13, breaks = 100)
 hist(credit.card$V9, breaks = 100)
 ```
 
-Veim com a més gràficament les diferents variables segueixen una distribució normal.
+Veim com, a més, gràficament les diferents variables segueixen una distribució normal.
+
+<br>
 
 #### Correlació entre variables
 
 A continuació, es representa la correlació trobada entre variables. El valor més elevat el trobam entre les variables "Amount" i V2: -0,53:
 
 ```{r, fig.width=12, fig.height=8}
-library(corrplot)
 corrplot(cor(credit.card[, -ncol(credit.card)]), 
                    method = "color",
                    type = "upper",
@@ -140,6 +158,9 @@ summary(c(t(credit.norm[, -ncol(credit.norm)])))
 Com veim, efectivament les dades es troben ara dins el rang [0,1] per a totes les variables.
 
 ### Separar en conjunts d'Entrenament i Test
+
+Per a aquesta pràctica, s'utilitza un 80% de les dades per a entrenament i un 20% per a test, ja que es tenen gran quantitat d'exemples. Tot i que en aquesta pràctica no es demana , el més indicat seria també deixar una partició per a validació de les dades, i poder trobar els paràmetres més indicats per a cada model i tècnica de rebalanceig, deixant el conjunt de test per a les proves finals. Això no s'ha fet així, perquè tampoc no era l'objectiu de la pràctica trobar els millors paràmetres, i dues particions ja basten per provar el rendiment dels diferents mètodes.
+
 ```{r}
 set.seed(777)
 train_ind <- sample(seq_len(nrow(credit.norm)), size = floor(nrow(credit.norm)*0.8), replace = FALSE)
@@ -153,21 +174,48 @@ nrow(credit.test)
 table(credit.test$Class)
 ```
 
+Com veim, la proporció d'exemples de cada classe es segueix respectant a cada subconjunt de dades.
 
-## Model de classificació
+## Models de classificació
+
+Se n'han emprat tres:
+
+* Arbre de decisió
+* SVM (màquina de vectors de suport)
+* KNN (K veïns més propers)
+
+Dels tres, el més ràpid és el primer, i per tant ha sigut l'utilitzat per a la majoria de proves, deixant els altres dos sols per a l'execució final. Tot i així, hi ha hagut casos on es fa Oversampling i no s'han emprat la SVM ni el KNN, degut a l'excés de temps consumit.
+
+Apart, la SVM dona problemes en alguna execució, no aconseguint convergir a la solució i quedant-se amb resultats molt pobres. No s'ha indagat molt en el motiu per falta de temps, però és possible que canviant el paràmetre cost i el kernel, o senzillament tornant a realitzar l'entrenament, es poguessin millorar els resultats.
+
+A continuació, es poden trobar diferents funcions que permeten calcular les diferents mètriques d'interés damunt un conjunt de prediccions, juntament amb una funció que entrena amb els diferents models i després en calcula les mètriques:
 
 ```{r}
-df_resultats <- function(resultats, gt, nom.tipus.tecnica, nom.tecnica, th=0.5){
+df_resultats <- function(resultats, gt, nom.tipus.tecnica, nom.tecnica, th=0.5, models=c("tree", "svm", "knn")){
   
   # Decision Tree
-  arbre = rpart( Class ~ ., data = resultats)
-  prediccio = predict(arbre, newdata = credit.test)
-  df = df_metriques(prediccio, resultats, gt, nom.tipus.tecnica, nom.tecnica, "arbre", th)
+  arbre = rpart(Class ~ ., data = resultats)
+  prediccio = predict(arbre, newdata = credit.test, probability = TRUE)
+  df = df_metriques(prediccio, resultats, gt, nom.tipus.tecnica, nom.tecnica, "Arbre", th=th)
   
-  # Knn, k=3
-  prediccio = knn(resultats[, -ncol(resultats)], credit.test[, -ncol(credit.test)], cl=resultats$Class, k=3)
-  df = rbind(df, df_metriques(prediccio, resultats, gt, nom.tipus.tecnica, nom.tecnica, "knn", pq=TRUE, th))
+  # SVM
+  if("svm" %in% models){
+    svmfit = svm(Class ~ ., data = resultats, kernel = "radial", cost = 1, scale = FALSE, probability = TRUE)
+    prediccio = predict(svmfit, credit.test, probability = TRUE)
+    df = rbind(df, df_metriques(attr(prediccio,"probabilities"), resultats, gt, nom.tipus.tecnica, nom.tecnica, "SVM", th=th))
+  }
   
+  # Knn
+  if("knn" %in% models){
+    prediccio = knn(resultats[, -ncol(resultats)], credit.test[, -ncol(credit.test)], cl=resultats$Class, k=5, prob = TRUE)
+    prediccio_prob = attr(prediccio,"prob")
+    prediccio2 = matrix(0, nrow=nrow(credit.test), ncol=2)
+    prediccio2[prediccio == 0, 1] = prediccio_prob[prediccio == 0]
+    prediccio2[prediccio == 0, 2] = 1 - prediccio_prob[prediccio == 0]
+    prediccio2[prediccio == 1, 2] = prediccio_prob[prediccio == 1]
+    prediccio2[prediccio == 1, 1] = 1 - prediccio_prob[prediccio == 1]
+    df = rbind(df, df_metriques(prediccio2, resultats, gt, nom.tipus.tecnica, nom.tecnica, "KNN", th=th))
+  }
   return(df)
 }
 
@@ -200,9 +248,9 @@ df_metriques <- function(prediccio, resultats, gt, nom.tipus.tecnica, nom.tecnic
   return(df)
 }
 
-get_pred_qual <- function(prediccion, th=0.5){
-  pred_qual=rep("0",dim(prediccion)[1])
-  pred_qual[prediccion[,2]>=th]="1"
+get_pred_qual <- function(prediccio, th=0.5){
+  pred_qual=rep("0",dim(prediccio)[1])
+  pred_qual[prediccio[,2]>=th]="1"
   return(as.factor(pred_qual))
 }
 
@@ -234,37 +282,28 @@ to_dataframe <- function(results) {
 }
 ```
 
-
-```{r}
-# arbre = rpart(Class ~ ., data = credit.train)
-# prediccio = predict(arbre, newdata = credit.test)
-# df = df_metriques(prediccio, credit.train, credit.test$Class, "Cap", "Cap", "arbre")
-# df
-```
-
-```{r}
-# prediccio = knn(credit.train[, -ncol(credit.train)], credit.test[, -ncol(credit.train)], cl=credit.train$Class, k=3)
-# df = df_metriques(prediccio, credit.train, credit.test$Class, "Cap", "Cap", "knn", pq=TRUE)
-# df
-```
-
-```{r}
-# library(neuralnet)
-# ann = neuralnet(Class ~ ., data = credit.train, hidden = c(5), act.fct = "logistic", linear.output = FALSE, stepmax=1000, lifesign = "full")
-# res =compute(ann, credit.test[, -ncol(credit.test)])
-# res$net.result
-```
-
-
+A continuació, s'entrena cada model amb les dades d'entrenament, per tenir una referència després amb la que comparar els resultats del rebalanceig i de la matriu de costs:
 
 ```{r}
 df.resultats = df_resultats(credit.train, credit.test$Class, "Cap", "Cap")
 df.resultats
 ```
 
+Com es pot veure, els tres models aconsegueixen resultats molt bons en quant a "F1 measure", arribant quasi a resultats perfectes, però la mètrica "Balanced Accuracy" es queda més enrere. Això és degut a que aquesta darrera depèn de l'especificitat, que es calcula com a TN/(TN+FP), tenint en compte que en el nostre cas els negatius són la classe minoritària. Per tant, és una forma de tenir en compte la quantitat d'encerts de la classe minoritària en relació no al total global, sino al total d'instàncies de la classe minoritària.
+
+La "Balanced Accuracy" no és més que la mitjana entre la sensitivitat i l'especificitat, i per tant també es veurà afectada pel desbalanceig de les clases.
+
+Així doncs, les mètriques que es consideren d'aquí en endavant són:
+
+* **Total de positius i negatius**, que canviarà si aplicam tècniques de resampling. Ens servirà per mesurar el desbalanceig de les classes.
+* **Precisió i Recall**, i la seva mitjana harmònica: la **"F1 measure"**. Ens servirà per mesurar el rendiment global del model.
+* **Sensitivity i Specificity** i la seva mitjana aritmètica: la **"Balanced Accuracy"**. Ens servirà per mesurar el rendiment dins la classe positiva i la negativa.
+
 ## Rebalanceig de les dades
+A l'hora de rebalancejar les dades, tenim tres opcions: crear dades de la classe positiva, eliminar-ne de la negativa, o les dues coses.
 
 ### Undersampling
+Partint de la teoria vista a classe, s'han provat els següents mètodes per tal de realitzar l'undersampling:
 
 * Random
 * Tomek Links
@@ -273,128 +312,345 @@ df.resultats
 * Neighborhood Cleaning Rule (NCL)
 * One-Sided Detection (OSS): Tomek Links + CNN
 * CNN + Tomek Links
+* CNN + Tomek Links + Random
+* Random + CNN + Tomek Links
+
+<br>
 
 #### Condensed Nearest Neighbors (CNN)
 ```{r}
 results = ubCNN(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k=1)
-df.resultats = rbind(df.resultats, df_resultats(to_dataframe(results), credit.test$Class, "Undersampling", "CNN"))
+df = df_resultats(to_dataframe(results), credit.test$Class, "Undersampling", "CNN")
+df.resultats = rbind(df.resultats, df)
+df
 ```
+
+Com veim, llevat de la SVM, que pareix que no ha sabut convergir a la solució, els altres dos models obtenen els mateixos resultats que abans, segurament degut a que quasi no s'han eliminat mostres.
+
+<br>
 
 #### Tomek Links
 ```{r}
 results = ubTomek(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class)
-df.resultats = rbind(df.resultats, df_resultats(to_dataframe(results), credit.test$Class, "Undersampling", "TL"))
+df = df_resultats(to_dataframe(results), credit.test$Class, "Undersampling", "TL")
+df.resultats = rbind(df.resultats, df)
+df
 ```
+
+Igual que en el cas del CNN, tampoc no s'aprecia millora (llevat d'una centèssima de balanced accuracy en el cas de l'arbre), segurament també degut a la poca eliminació de mostres.
+
+<br>
 
 #### One-Sided Detection (OSS): Tomek Links + CNN
 ```{r}
 results = ubOSS(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class)
-df.resultats = rbind(df.resultats, df_resultats(to_dataframe(results), credit.test$Class, "Undersampling", "TL+CNN"))
+df = df_resultats(to_dataframe(results), credit.test$Class, "Undersampling", "TL+CNN")
+df.resultats = rbind(df.resultats, df)
+df
 ```
+
+Tot i que es combinin les dues tècniques, es segueixen eliminant poques instàncies, i el desbalanç segueix essent massa gran com per notar millora notable.
+
+<br>
+
 #### Neighborhood Cleaning Rule (NCL)
 ```{r}
 results = ubNCL(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k=3) # Amb k=10 no n'esborra cap
-df.resultats = rbind(df.resultats, df_resultats(to_dataframe(results), credit.test$Class, "Undersampling", "NCL"))
+df = df_resultats(to_dataframe(results), credit.test$Class, "Undersampling", "NCL")
+df.resultats = rbind(df.resultats, df)
+df
 ```
+
+En aquest cas, la millora és de dues centèssimes en el cas de l'arbre i de la SVM, pel que fa a la "Balanced Accuracy", sense notar-se a penes canvis a la "F1 Measure".
+
+<br>
 
 #### Edited Nearest Neighbors (ENN)
 ```{r}
 results = ubENN(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k=3)
-df.resultats = rbind(df.resultats, df_resultats(to_dataframe(results), credit.test$Class, "Undersampling", "ENN"))
+df = df_resultats(to_dataframe(results), credit.test$Class, "Undersampling", "ENN")
+df.resultats = rbind(df.resultats, df)
+df
 ```
+
+Emprant ENN, tampoc no es noten canvis respecte de no rebalancejar.
+
+<br>
 
 #### Random
 ```{r}
 results = ubUnder(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc = 30)
-df.resultats = rbind(df.resultats, df_resultats(to_dataframe(results), credit.test$Class, "Undersampling", "R.Under"))
+df = df_resultats(to_dataframe(results), credit.test$Class, "Undersampling", "R.Under")
+df.resultats = rbind(df.resultats, df)
+df
 ```
+
+Veim que emprant el mètode de reducció aleatori, si que hi ha gran diferència respecte de la situacio inicial. Obviant el fet que la SVM no ha aconseguit convergir a solució, podem apreciar:
+
+* La F1-Measure baixa una mica (menys d'una centèssima)
+* La Specificity millora notablement, sobretot per a l'arbre de decisió. Això significa que també puja la Balanced Accuracy.
+
+Els resultats obtinguts depenen bastant de l'execució, ja que es troba d'una mètode que depèn de l'atzar, però els resultats segueixen en general les característiques descrites, millorant per tant el tema del desbalenceig inicial.
+
+Cal comentar també que s'han provat diferents valors per al paràmectre perc, que permet elegir el percentatge de positius a les dades finals, i que 30 ha donat millors resultats, en general, que valors més alts i més baixos.
+
+<br>
 
 #### CNN + Tomek Links
 ```{r}
 cnn2 = ubCNN(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k=1)
 results = ubTomek(X=cnn2$X, Y=cnn2$Y)
-df.resultats = rbind(df.resultats, df_resultats(to_dataframe(results), credit.test$Class, "Undersampling", "CNN+TL"))
+df = df_resultats(to_dataframe(results), credit.test$Class, "Undersampling", "CNN+TL")
+df.resultats = rbind(df.resultats, df)
+df
 ```
+
+Igual que els mètodes ja vists que no apliquen una gran reducció, no s'aprecien millores.
+
+<br>
 
 #### CNN + Tomek Links + Random
 ```{r}
 cnn2 = ubCNN(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k=1)
 tl2 = ubTomek(X=cnn2$X, Y=cnn2$Y)
 results = ubUnder(X=tl2$X, Y=tl2$Y, perc = 30)
-df.resultats = rbind(df.resultats, df_resultats(to_dataframe(results), credit.test$Class, "Undersampling", "CNN+TL+R.Under"))
+df = df_resultats(to_dataframe(results), credit.test$Class, "Undersampling", "CNN+TL+R.Under")
+df.resultats = rbind(df.resultats, df)
+df
 ```
+
+Els resultats obtinguts aplicant CNN i TL abans del mètode aleatori mostren una mica més de millora respecte del mètode purament aleatori, tot i que els resultats segueixen depenent de l'execució.
+
+<br>
 
 #### Random + CNN + Tomek Links
 ```{r}
 random = ubUnder(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc = 30)
 cnn2 = ubCNN(X=random$X, Y=random$Y, k=1)
 results = ubTomek(X=cnn2$X, Y=cnn2$Y)
-df.resultats = rbind(df.resultats, df_resultats(to_dataframe(results), credit.test$Class, "Undersampling", "R.Under+CNN+TL"))
+df = df_resultats(to_dataframe(results), credit.test$Class, "Undersampling", "R.Under+CNN+TL")
+df.resultats = rbind(df.resultats, df)
+df
 ```
+
+Com en el cas anterior, els resultats obtinguts són prou pareguts als obtinguts amb el mètode aleatori, depenent una mica de l'execució, degut a la part d'atzar.
 
 
 ### Oversampling
 
+Per a l'oversampling, s'han provat els següents tres mètodes:
+
 * Random
 * SMOTE
-* Borderline-SMOTE -> no està al paquet unbalanced
+
+Degut a problemes de temps de càlcul amb tantes dades amb el model SVM, i a un error amb la quantitat d'empats amb el KNN, sols s'ha emprat l'arbre de decisió per a l'oversampling aleatori, i tant l'arbre com el KNN per a l'SMOTE.
+
+<br>
 
 #### Random
+
+En aquest cas, s'ha emprat k=0, que indica que volem el mateix nombre d'instàncies de cada classe:
 ```{r}
-# Emprar k=0 per deixar amb els mateixos exemples que classe majoritària
-results = ubOver(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k = 300)
-df.resultats = rbind(df.resultats, df_resultats(to_dataframe(results), credit.test$Class, "Oversampling", "R.Over"))
+results = ubOver(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, k = 0) # Mateixos exemples que classe majoritària
+df = df_resultats(to_dataframe(results), credit.test$Class, "Oversampling", "R.Over", models = c("tree"))
+df.resultats = rbind(df.resultats, df)
+df
 ```
 
+Es pot apreciar una reducció de la "F1 Measure", que passa de 0.9997 a 0,9784. Tot i així, també millora la "Balanced Accuracy", passant de 0.850 a 0,919, gràcies a una notable millora a l'especificitat. Tinguem en compte també en aquest cas, que els resultats dependran en part de l'atzar, i per tant poden variar entre execucions.
 
+<br>
 
 #### SMOTE
 
+En aquest cas, s'ha elegit perc.over=20000 perquè deixa aproximadament un 26% de les dades finals com a positius, que s'aproxima al valor elegit anteriorment per a l'undersampling aleatori. Hem provat d'elevar més aquest percentatge, però els resultats no han sigut gaire millors.
 ```{r}
 results = rbind(credit.train, to_dataframe(ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 20000, perc.under = 0)))
-df.resultats = rbind(df.resultats, df_resultats(results, credit.test$Class, "Oversampling", "SMOTE"))
+df = df_resultats(results, credit.test$Class, "Oversampling", "SMOTE", models = c("tree", "knn"))
+df.resultats = rbind(df.resultats, df)
+df
 ```
+
+Veim que emprant SMOTE s'aconsegueix conservar una molt millor "F1 Measure" que emprant el mètode aleatori, tot i que la "Balanced Accuracy" a la que s'arriba està tres centèssimes per davall, en el cas de l'arbre de decisió. Tot i així, el model KNN aconsegueix superar a l'arbre de decisió en les dues mètriques.
 
 ### Hybrid resampling
 
-* SMOTE with random undersampling
+* SMOTE amb random undersampling
 * SMOTE + Tomek LInks
 * SMOTE + ENN
-* Altres combinacions
+* SMOTE amb random undersampling + Tomek Links
+
+En aquest apartat, s'empra sols l'arbre de decisió i el KNN, degut, un altre cop, a l'excés de temps de càlcul requerit per la SVM.
+
+<br>
 
 #### SMOTE with random undersampling
 ```{r}
-results = ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 20000, perc.under = 200)
-df.resultats = rbind(df.resultats, df_resultats(to_dataframe(results), credit.test$Class, "Hybrid Resampling", "SMOTE+R.Under"))
+results = ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 10000, perc.under = 200)
+df = df_resultats(to_dataframe(results), credit.test$Class, "Hybrid Resampling", "SMOTE+R.Under", models = c("tree", "knn"))
+df.resultats = rbind(df.resultats, df)
+df
 ```
+
+Els resultats obtinguts són dels millors fins ara, ja que s'aconsegueix conservar un alt valor de "F1 Measure" alhora que es millora la "Balanced Accuracy". Els resultats del KNN són una mica millors que els de l'arbre de decisió. Com que es fa un undersampling aleatori, és normal trobar també certa variació entre execucions.
+
+<br>
 
 #### SMOTE + Tomek LInks
 ```{r}
-h.smote.tk = join.smote.results(ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 20000, perc.under = 0), credit.train)
+h.smote.tk = rbind(credit.train, to_dataframe(ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 20000, perc.under = 0)))
 results = ubTomek(X=h.smote.tk[, -ncol(credit.train)], Y=h.smote.tk$Class)
-df.resultats = rbind(df.resultats, df_resultats(to_dataframe(results), credit.test$Class, "Hybrid Resampling", "SMOTE+TK"))
+df = df_resultats(to_dataframe(results), credit.test$Class, "Hybrid Resampling", "SMOTE+TK", models = c("tree", "knn"))
+df.resultats = rbind(df.resultats, df)
+df
 ```
+
+En aquest cas, estam emprant totes les dades de la classe majoritària. Els resultats són molt pareguts al cas anterior, amb una mica millor "F1 Measure" i pitjor "Balanced Accuracy". 
+
+<br>
 
 #### SMOTE + ENN
 ```{r}
-h.smote.enn = join.smote.results(ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 20000, perc.under = 0), credit.train)
+h.smote.enn = rbind(credit.train, to_dataframe(ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 20000, perc.under = 0)))
 results = ubENN(X=h.smote.enn[, -ncol(credit.train)], Y=h.smote.enn$Class, k=3)
-df.resultats = rbind(df.resultats, df_resultats(to_dataframe(results), credit.test$Class, "Hybrid Resampling", "SMOTE+ENN"))
+df = df_resultats(to_dataframe(results), credit.test$Class, "Hybrid Resampling", "SMOTE+ENN", models = c("tree", "knn"))
+df.resultats = rbind(df.resultats, df)
+df
 ```
 
-#### SMOTE with random undersampling + Tomek Links
+Els resultats són quasi idèntics als aconseguits emprant SMOTE+TL.
+
+<br>
+
+#### SMOTE amb random undersampling + Tomek Links
 ```{r}
-h.urandom.smote.tk = ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 2000, perc.under = 200)
+h.urandom.smote.tk = ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 10000, perc.under = 200)
 results = ubTomek(X=h.urandom.smote.tk$X, Y=h.urandom.smote.tk$Y)
-df.resultats = rbind(df.resultats, df_resultats(to_dataframe(results), credit.test$Class, "Hybrid Resampling", "SMOTE+R.Under+TK"))
+df = df_resultats(to_dataframe(results), credit.test$Class, "Hybrid Resampling", "SMOTE+R.Under+TK", models = c("tree", "knn"))
+df.resultats = rbind(df.resultats, df)
+df
 ```
 
-### Model sensible al cost
+Els resultats obtinguts són prou bons, i molt pareguts als obtinguts amb el mètode de SMOTE amb random undersampling. Pareix que el fet d'aplicar després Tomek Links no canvia molt les coses.
 
+### Models sensibles al cost
+
+Per emprar una estratègia basada en una matriu de costs tenim dues possibilitats:
+
+* Emprar un valor llindar calculat a partir de la matriu de costs i que, aplicada a la probabilitat sortida del model, ens dugui a elegir la classe positiva o negativa.
+* Fixar pesos als exemple de l'entrenament, donant importància segons la matriu de costs als que siguin d'una classe o altra. Utilitzar aquests pesos per a l'entrenament, de forma que el model aprengui a compensar la importància de la classe minoritària.
+
+Per tal de provar diferents valors de thresh, s'han provat dues matrius de cost diferents (les files representen la ground truth i les columnes les prediccions):
+
+Primer el cost es calcula en base a la quantitat d'exemples de la classe majoritària que es tenen per cadascun de la minoritària:
+```{r}
+distr.classes = table(credit.train$Class)
+costs1 = matrix(c(0, 1, distr.classes[[1]]/distr.classes[[2]], 0), 2)
+costs1
+thresh1 = costs1[2,1]/(costs1[2,1] + costs1[1,2])
+thresh1
+```
+
+Després també es prova un altre valor (1000), donant encara una mica més d'imporància a la classe minoritària:
+```{r}
+costs2 = matrix(c(0, 1, 1000, 0), 2)
+costs2
+thresh2 = costs2[2,1]/(costs2[2,1] + costs2[1,2])
+thresh2
+```
+
+<br>
+
+#### Emprant Threshold
+
+Un avantatge d'aquest mètode és que podem primer entrenar els models i fer les prediccions, i després intentar trobar la matriu de costs que millors resultats ens doni.
+
+Primer entrenam els models i feim les prediccions:
+```{r}
+
+# Arbre de decisió
+arbre = rpart(Class ~ ., data = credit.train)
+prediccio_arbre = predict(arbre, newdata = credit.test, probability = TRUE)
+
+# KNN
+prediccio = knn(credit.train[, -ncol(credit.train)], credit.test[, -ncol(credit.train)], cl=credit.train$Class, k=5, prob = TRUE)
+prediccio_prob = attr(prediccio,"prob")
+# Càlcul de la probabilitat de les diferents classes
+prediccio2 = matrix(0, nrow=nrow(credit.test), ncol=2)
+prediccio2[prediccio == 0, 1] = prediccio_prob[prediccio == 0]
+prediccio2[prediccio == 0, 2] = 1 - prediccio_prob[prediccio == 0]
+prediccio2[prediccio == 1, 2] = prediccio_prob[prediccio == 1]
+prediccio2[prediccio == 1, 1] = 1 - prediccio_prob[prediccio == 1]
+prediccio_knn = prediccio2
+
+# SVM
+svmfit = svm(Class ~ ., data = credit.train, kernel = "radial", cost = 1, scale = FALSE, probability = TRUE)
+prediccio = predict(svmfit, credit.test, probability = TRUE)
+prediccio_svm = attr(prediccio,"probabilities")
+```
+
+Després aplicam el threshold a les prediccions, i en treim les mètriques, emprant els dos thresholds diferents:
+
+```{r}
+th = thresh1 # 0,00172
+df.resultats_cost = df_metriques(prediccio_arbre, credit.train, credit.test$Class, "Cost Sensitive", paste("Thresh =", round(th,4)), "Arbre", th = th)
+df.resultats_cost = rbind(df.resultats_cost, df_metriques(prediccio_svm, credit.train, credit.test$Class, "Cost Sensitive", paste("Thresh =", round(th,4)), "SVM", th = th))
+df.resultats_cost = rbind(df.resultats_cost, df_metriques(prediccio_knn, credit.train, credit.test$Class, "Cost Sensitive", paste("Thresh =", round(th,4)), "KNN", th = th))
+
+th = thresh2 # 0,001
+df.resultats_cost = rbind(df.resultats_cost, df_metriques(prediccio_arbre, credit.train, credit.test$Class, "Cost Sensitive", paste("Thresh =", round(th,4)), "Arbre", th = th))
+df.resultats_cost = rbind(df.resultats_cost, df_metriques(prediccio_svm, credit.train, credit.test$Class, "Cost Sensitive", paste("Thresh =", round(th,4)), "SVM", th = th))
+df.resultats_cost = rbind(df.resultats_cost, df_metriques(prediccio_knn, credit.train, credit.test$Class, "Cost Sensitive", paste("Thresh =", round(th,4)), "KNN", th = th))
+
+df.resultats = rbind(df.resultats, df.resultats_cost)
+df.resultats_cost
+```
+
+Podem veure que els resultats als que arribam són prou pareguts als aconseguits amb les tècniques de balanceig. A l'hora de triar el millor model i threshold, haurem d'elegir entre la "F1 Measure" i la "Balanced Accuracy", ja que no hi ha ningun model que aconsegueixi, alhora, el millor valor per a les dues mètriques.
+
+Tot i així, la SVM amb un threshold de 0,001 pareix obtenir la millor especificitat, i el cost en "F1 Measure" és prou baix: 0,004.
+
+<br>
+
+#### Definint pesos
+
+Per a aquest mètode, sols podrem emprar models que acceptin pesos per a les dades, la qual cosa descarta el KNN i ens deixa sols amb l'arbre de decisió i la SVM. Tot i així, un cop més s'han trobat problemes amb la SVM, pel que fa al temps de càlcul. Es deixa comentat el codi per utilitzar-lo, tot i que no s'ha arribat a emprar. Potser amb uns altres paràmetres s'hagués pogut aconseguir que acabàs amb menys temps.
+
+```{r}
+# Arbre de decisió
+th = thresh1
+arbre = rpart(Class ~ ., data = credit.train, weights = ifelse(credit.train$Class == 1, 1.0, th))
+prediccio_arbre = predict(arbre, newdata = credit.test, probability = TRUE)
+df = df_metriques(prediccio_arbre, credit.train, credit.test$Class, "Cost Sensitive", paste("Weigths =", round(th,4)), "Arbre")
+
+th = thresh2
+arbre = rpart(Class ~ ., data = credit.train, weights = ifelse(credit.train$Class == 1, 1.0, th))
+prediccio_arbre = predict(arbre, newdata = credit.test, probability = TRUE)
+df = rbind(df, df_metriques(prediccio_arbre, credit.train, credit.test$Class, "Cost Sensitive", paste("Weigths =", round(th,4)), "Arbre"))
+
+# SVM
+# th = thresh1
+# w = c(th, 1)
+# names(w) = c("0", "1")
+# svmfit = svm(Class ~ ., data = credit.train, kernel = "radial", cost = 1, scale = FALSE, probability = FALSE, class.weights=w)
+# prediccio = predict(svmfit, credit.test, probability = FALSE)
+# df = rbind(df, df_metriques(prediccio, credit.train, credit.test$Class, "Cost Sensitive", paste("Weigths =", round(th,4)), "SVM", pq=TRUE))
+
+# th = thresh2
+# w = c(th, 1)
+# names(w) = c("0", "1")
+# svmfit = svm(Class ~ ., data = credit.train, kernel = "radial", cost = 1, scale = FALSE, probability = FALSE, class.weights=w)
+# prediccio = predict(svmfit, credit.test, probability = FALSE)
+# df = rbind(df, df_metriques(prediccio, credit.train, credit.test$Class, "Cost Sensitive", paste("Weigths =", round(th,4)), "SVM", pq=TRUE))
+
+df.resultats = rbind(df.resultats, df)
+df
+```
+
+Com es pot apreciar, pareix que aquest mètode és més agressiu que l'anterior, i redueix unes centèssimes la "F1 Measure", a canvi d'aconseguir bons valors de "Balanced Accuracy"
 
 ## Resultats
 ```{r}
-options(digits=5)
 df.resultats
 ```
 
@@ -408,33 +664,39 @@ df.resultats
 
 
 
-```{r}
-train(Class ~ ., data = credit.train,
-                   method = "knn",
-                   tuneGrid = data.frame(k=3),
-                   metric = "Accuracy")
 
+
+
+
+
+
+
+
+```{r}
+# arbre = rpart(Class ~ ., data = credit.train)
+# prediccio = predict(arbre, newdata = credit.test, probability = TRUE)
+# df = df_metriques(prediccio, credit.train, credit.test$Class, "Cap", "Cap", "arbre", pq=FALSE)
+# df
 ```
 
 ```{r}
-library(traineR)
-
-modelo.knn <- train.knn(Class ~ ., credit.train, ks=c(3))
-p <- predict(modelo.knn, credit.test, type = "class")
+# prediccio = knn(credit.train[, -ncol(credit.train)], credit.test[, -ncol(credit.train)], cl=credit.train$Class, k=5, prob = TRUE)
+# prediccio_prob = attr(prediccio,"prob")
+# prediccio2 = matrix(0, nrow=nrow(credit.test), ncol=2)
+# prediccio2[prediccio == 0, 1] = prediccio_prob[prediccio == 0]
+# prediccio2[prediccio == 0, 2] = 1 - prediccio_prob[prediccio == 0]
+# prediccio2[prediccio == 1, 2] = prediccio_prob[prediccio == 1]
+# prediccio2[prediccio == 1, 1] = 1 - prediccio_prob[prediccio == 1]
+# df = df_metriques(prediccio2, credit.train, credit.test$Class, "Cap", "Cap", "knn", pq=FALSE)
+# df
 ```
 
-
-
-
-
-
-
-
-
-
-
-
-
+```{r}
+# svmfit = svm(Class ~ ., data = credit.train, kernel = "radial", cost = 1, scale = FALSE, probability = TRUE)
+# prediccio = predict(svmfit, credit.test, probability = TRUE)
+# df = df_metriques(attr(prediccio,"probabilities"), credit.train, credit.test$Class, "Cap", "Cap", "SVM", pq=FALSE)
+# df
+```
 
 
 

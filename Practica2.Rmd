@@ -19,7 +19,7 @@ Per resoldre aquest problema existeixen diverses tècniques que minimitzen els e
 
 Les dades utilitzades són un conjunt de dades relacionades amb el frau en transaccions bancàries. En aquest cas, la majoria de les dades són transaccions no fraudulentes, però n'hi ha unes poques que s'han detectat com a frau, i es preté, a partir de les dades que es tenen, intentar detectar quan s'ha comés el crim.
 
-## 1. Preparació del DataFrame
+## Preparació del DataFrame
 
 Importar llibreries:
 
@@ -32,9 +32,9 @@ library(e1071) # SVM
 library(corrplot)
 ```
 
-### 1.1. Lectura del CSV
+### Lectura del CSV
 
-Llegir el CSV amb la informació dels crims comesos a Los Ángeles. A més, convertim a numèric tots els valors de les diferents variables, i en factors els valors de la classe que volem predir.
+Llegir el CSV amb la informació de targetes de crèdit. A més, convertim a numèric tots els valors de les diferents variables, i en factors els valors de la classe que volem predir:
 
 ```{r}
 credit.card = read.csv2("creditcard.csv", header = TRUE, sep = ",")

@@ -373,7 +373,7 @@ df.resultats = rbind(df.resultats, df)
 df
 ```
 
-Emprant ENN, tampoc no es noten canvis respecte de no rebalancejar.
+Emprant ENN, tampoc no es noten canvis respecte de no rebalancejar, ja que sols s'esborren 5 mostres.
 
 <br>
 
@@ -500,12 +500,12 @@ Els resultats obtinguts són dels millors fins ara, ja que s'aconsegueix conserv
 ```{r}
 h.smote.tk = rbind(credit.train, to_dataframe(ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 20000, perc.under = 0)))
 results = ubTomek(X=h.smote.tk[, -ncol(credit.train)], Y=h.smote.tk$Class)
-df = df_resultats(to_dataframe(results), credit.test$Class, "Hybrid Resampling", "SMOTE+TK", models = c("tree", "knn"))
+df = df_resultats(to_dataframe(results), credit.test$Class, "Hybrid Resampling", "SMOTE+TL", models = c("tree", "knn"))
 df.resultats = rbind(df.resultats, df)
 df
 ```
 
-En aquest cas, estam emprant totes les dades de la classe majoritària. Els resultats són molt pareguts al cas anterior, amb una mica millor "F1 Measure" i pitjor "Balanced Accuracy". 
+En aquest cas, estam emprant totes les dades de la classe majoritària. Els resultats són molt pareguts al cas anterior, amb una mica millor "F1 Measure" i pitjor "Balanced Accuracy". Tot i així, això no és degut al fet d'afegir l'eliminació de Tomek Links, ja que no se'n troba cap.
 
 <br>
 
@@ -518,7 +518,7 @@ df.resultats = rbind(df.resultats, df)
 df
 ```
 
-Els resultats són quasi idèntics als aconseguits emprant SMOTE+TL.
+Els resultats són quasi idèntics als aconseguits emprant SMOTE+TL, es noten poc les 108 mostres eliminades.
 
 <br>
 
@@ -526,12 +526,12 @@ Els resultats són quasi idèntics als aconseguits emprant SMOTE+TL.
 ```{r}
 h.urandom.smote.tk = ubSMOTE(X=credit.train[, -ncol(credit.train)], Y=credit.train$Class, perc.over = 10000, perc.under = 200)
 results = ubTomek(X=h.urandom.smote.tk$X, Y=h.urandom.smote.tk$Y)
-df = df_resultats(to_dataframe(results), credit.test$Class, "Hybrid Resampling", "SMOTE+R.Under+TK", models = c("tree", "knn"))
+df = df_resultats(to_dataframe(results), credit.test$Class, "Hybrid Resampling", "SMOTE+R.Under+TL", models = c("tree", "knn"))
 df.resultats = rbind(df.resultats, df)
 df
 ```
 
-Els resultats obtinguts són prou bons, i molt pareguts als obtinguts amb el mètode de SMOTE amb random undersampling. Pareix que el fet d'aplicar després Tomek Links no canvia molt les coses.
+Els resultats obtinguts són prou bons, i molt pareguts als obtinguts amb el mètode de SMOTE amb random undersampling, evidentment, ja que no es troba cap Tomek Link.
 
 ### Models sensibles al cost
 
@@ -647,56 +647,53 @@ df.resultats = rbind(df.resultats, df)
 df
 ```
 
-Com es pot apreciar, pareix que aquest mètode és més agressiu que l'anterior, i redueix unes centèssimes la "F1 Measure", a canvi d'aconseguir bons valors de "Balanced Accuracy"
+Com es pot apreciar, pareix que aquest mètode és més agressiu que l'anterior, i redueix unes centèssimes la "F1 Measure", a canvi d'aconseguir bons valors de "Balanced Accuracy".
 
 ## Resultats
+
+A continuació, es mostren els resultats obtinguts amb els diferents models i tècniques, ordenats per "Balanced Accuracy", per tal de comparar-los i treure'n conclusions:
 ```{r}
-df.resultats
+df.resultats[order(df.resultats$Bal.Acc, decreasing = TRUE),]
 ```
 
+Pel que s'ha pogut comprovar, els millors resultats els ha obtingut la tècnica de resampling híbrid emprant SMOTE, undersampling aleatori i Tomek Links, que aconsegueix arribar al valor més alt de "Balanced Accuracy", alhora de conservar una "F1 Measure" molt elevada. De totes formes, cal recordar que no s'arriba a trobar ni eliminar cap Tomek Link, i que per tant els canvis respecte de no aplicar Tomek Links són deguts a l'atzar, a l'hora d'elegir aleatòriament les dades a eliminar o afegir.
+
+Seguint-la d'aprop, trobam les tècniques d'undersampling emprant Tomek Links, CNN i undersampling aleatori. Després, ja trobam tècniques sensitives al cost i d'oversampling.
+
+Tot i el comentat, la diferència a les primeres posicions és de qüestió de milèssimes, la qual cosa complica les comparances. Per tant, en general qualsevol de les tècniques que podem trobar al top 10 aconsegueix arreglar bastant el problema de desbalancejament.
+
+<br>
+
+### Models
+
+En general, s'aprecia que el model que millor rendiment ha donat ha sigut el KNN, seguit de l'arbre de decisió i després de la SVM. Tot i ser així, es pot comprovar que la tècnica sensitiva al cost emprant un llindar ha funcionat sorprenentment bé amb la SVM. 
+
+Un altre aspecte a tenir en compte és el cost en temps dels tres models, i és que l'arbre de decisió ha sigut molt més ràpid de calcular en tots els casos, mentre que la SVM ha sigut més ràpida que el KNN després d'aplicar tècniques d'undersampling, però no s'ha pogut aplicar després de tècniques d'oversampling o híbrides.
+
+<br>
+
+### Tècniques
+
+#### Undersampling
+D'entre les tècniques provades d'undersampling, la que millors resultats ha aconseguit ha sigut l'aleatòria, ja que la resta de tècniques esborren poca quatitat de mostres i no aconsegueixen rebalancejar suficientment el dataset. Tot i així, s'ha apreciat una lleugera millora quan es complementa aquesta tècnica amb d'altres, com Tomek Links o CNN.
+
+#### Oversampling
+Pel que fa a les tècniques d'oversampling, l'SMOTE ha mostrat millors resultats que l'aleatori, sobretot en quant a "F1 Measure".
+
+#### Hybrid resampling
+En aquest cas, ha destacat l'ús de l'SMOTE amb un undersampling aleatori. Un altre cop, aplicar d'altres tècniques d'undersampling canvia poc les coses, ja que quasi no s'eliminen dades.
+
+#### Models sensibles al cost
+Aquí s'ha pogut veure la importància d'elegir una matriu de costs apropiada. Emprar un valor llindar per elegir la classe, a partir de la probabilitat per classe, ha estat el mètode que millors resultats ha donat, sobretot emprant la mètrica "F1 Measure", ja que emprar el llindar calculat directament per entrenar el model, fa que aquest empitjori una mica.
+
+<br>
+
+### Conclusions finals
+Primer de tot, hem de comentar que partim d'uns resultats molt bons, amb una puntuació quasi perfecta en quant a "F1 Measure". Per tant, l'objectiu ha sigut afectar el mínim possible a aquesta puntuació, alhora que s'ha intentat millorar l'especificitat, que és molt més baixa degut al desbalanç de les classes.
+
+Tant les tècniques d'oversampling, undersampling, resampling híbrid com els models sensibles al cost han demostrat ser aptes per a millorar els resultats inicials. Tot i així, faria falta emprar un conjunt de validació i mirar de trobar els hiperparàmetres adequats tant per als models emprats com per a les tècniques, abans de decidir-se per una en concret.
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-```{r}
-# arbre = rpart(Class ~ ., data = credit.train)
-# prediccio = predict(arbre, newdata = credit.test, probability = TRUE)
-# df = df_metriques(prediccio, credit.train, credit.test$Class, "Cap", "Cap", "arbre", pq=FALSE)
-# df
-```
-
-```{r}
-# prediccio = knn(credit.train[, -ncol(credit.train)], credit.test[, -ncol(credit.train)], cl=credit.train$Class, k=5, prob = TRUE)
-# prediccio_prob = attr(prediccio,"prob")
-# prediccio2 = matrix(0, nrow=nrow(credit.test), ncol=2)
-# prediccio2[prediccio == 0, 1] = prediccio_prob[prediccio == 0]
-# prediccio2[prediccio == 0, 2] = 1 - prediccio_prob[prediccio == 0]
-# prediccio2[prediccio == 1, 2] = prediccio_prob[prediccio == 1]
-# prediccio2[prediccio == 1, 1] = 1 - prediccio_prob[prediccio == 1]
-# df = df_metriques(prediccio2, credit.train, credit.test$Class, "Cap", "Cap", "knn", pq=FALSE)
-# df
-```
-
-```{r}
-# svmfit = svm(Class ~ ., data = credit.train, kernel = "radial", cost = 1, scale = FALSE, probability = TRUE)
-# prediccio = predict(svmfit, credit.test, probability = TRUE)
-# df = df_metriques(attr(prediccio,"probabilities"), credit.train, credit.test$Class, "Cap", "Cap", "SVM", pq=FALSE)
-# df
-```
 
 
 
